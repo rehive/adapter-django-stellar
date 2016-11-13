@@ -102,17 +102,22 @@ class UserAccount(models.Model):
         if not self.id:  # On create
             logger.info('Fetching account_id.')
             self.admin_account = AdminAccount.objects.get(name='receive')
-            self._new_account_id()
+            self._new_account()
         return super(UserAccount, self).save(*args, **kwargs)
 
-    def _new_account_id(self):
+    def _new_account(self):
         from .api import Interface
         interface = Interface(account=self.admin_account)
 
         # Get and save user account ID:
-        self.account_id = interface.get_user_account_id()
+        account_details = interface.get_user_account_details()
+        self.account_id = account_details['account_id']
+        self.metadata = account_details['details']
 
-        return self.account_id
+        return account_details
+
+    def get_details(self):
+        return {'account_id': self.account_id, 'details': self.metadata}
 
     def subscribe_to_hooks(self):
         from .api import WebhookReceiveInterface
@@ -126,7 +131,10 @@ def subscribe_to_receive_hooks(sender, instance, created, **kwargs):
     # Kwargs raw is used to check if data is loaded from fixtures.
     if created and not kwargs.get('raw', False):
         logger.info('Subscribing to webhooks for receive transactions')
-        instance.subscribe_to_hooks()
+        try:
+            instance.subscribe_to_hooks()
+        except:
+            pass
 
 
 # HotWallet/ Operational Accounts for sending or receiving on behalf of users.
@@ -151,13 +159,13 @@ class AdminAccount(models.Model):
         return True
 
     # Return account id (e.g. Bitcoin address)
-    def get_account_id(self) -> str:
+    def get_account_details(self) -> dict:
         from .api import Interface
         """
         Returns third party identifier of Admin account. E.g. Bitcoin address.
         """
         interface = Interface(account=self)
-        return interface.get_account_id()
+        return interface.get_account_details()
 
     def get_balance(self) -> int:
         from .api import Interface

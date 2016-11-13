@@ -1,10 +1,10 @@
 from logging import getLogger
 
 import requests
+from django.conf import settings
 
-from src.adapter.exceptions import NotImplementedAPIError
-from src.adapter.stellar_federation import get_federation_details, address_from_domain
-from src.config import settings
+from .exceptions import NotImplementedAPIError
+from .stellar_federation import get_federation_details, address_from_domain
 from .utils import to_cents, create_qr_code_url
 
 from decimal import Decimal
@@ -27,12 +27,6 @@ class AbstractBaseInteface:
         # Always linked to an AdminAccount
         self.account = account
 
-    def get_user_account_id(self):
-        """
-        Generated or retrieve an account ID from third-party API or cryptocurrency.
-        """
-        raise NotImplementedError('subclasses of AbstractBaseUser must provide a get_user_account_id() method')
-
     def get_user_account_details(self) -> dict:
         """
         Returns account id and details
@@ -42,12 +36,6 @@ class AbstractBaseInteface:
          }
         """
         raise NotImplementedError('subclasses of AbstractBaseUser must provide a get_user_account_details() method')
-
-    def get_account_id(self):
-        """
-        Generated or retrieve an account ID from third-party API or cryptocurrency.
-        """
-        raise NotImplementedError('subclasses of AbstractBaseUser must provide a get_account_id() method')
 
     def get_account_details(self) -> dict:
         """
@@ -218,7 +206,7 @@ class Interface:
         except Exception as exc:
             print(exc.payload)
 
-    def get_balance(self):
+    def get_account_balance(self):
         address = self.address
         address.get()
         for balance in address.balances:
@@ -249,15 +237,38 @@ class Interface:
 
     # Generate new crypto address/ account id
     @staticmethod
-    def new_account_id(**kwargs):
+    def get_user_account_details(**kwargs):
         metadata = kwargs.get('metadata')
         account_id = metadata['username'] + '*' + getattr(settings, 'STELLAR_WALLET_DOMAIN')
-        return account_id
+        return {'account_id': account_id, 'details': {}}
 
     def get_account_details(self):
         address = self.account.account_id
         qr_code = create_qr_code_url('stellar:' + str(address))
         return {'account_id': address, 'details': {'qr_code': qr_code}}
+
+    def get_or_create_asset(self, issuer, asset_code, metadata):
+        try:
+            issuer_address = self.get_issuer_address(issuer, asset_code)
+
+            # Trust and create asset if it does not yet exist.
+            if not Asset.objects.filter(code=asset_code, account_id=issuer_address).exists():
+                self.trust_issuer(asset_code, issuer)
+                Asset.objects.create(code=asset_code, issuer=issuer, account_id=issuer_address, metadata=metadata)
+            else:
+                logger.info('Issuer already trusted: %s %s' % (issuer, asset_code))
+
+            return {'issuer': issuer,
+                    'asset_code': asset_code,
+                    'details': {'account_id': issuer_address, 'metadata': metadata}}
+
+        except Exception as exc:
+            logger.exception(exc)
+            try:
+                logger.info(exc.payload)
+            except:
+                pass
+            raise APIException('Error adding asset.')
 
 
 class AbstractReceiveWebhookInterfaceBase:
@@ -292,6 +303,6 @@ def process_webhook_receive(webhook_type, receive_id, data):
 @shared_task
 def process_receive():
     logger.info('checking stellar receive transactions...')
-    hotwallet = AdminAccount.objects.get(name='hotwallet')
+    hotwallet = AdminAccount.objects.get(default=True)
     hotwallet.process_new_transactions()
 

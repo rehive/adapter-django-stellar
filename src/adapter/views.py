@@ -238,30 +238,12 @@ class AddAssetView(GenericAPIView):
         # Get Metadata:
         metadata = input_to_json(request.data.get('metadata'))
 
-        try:
-            account = AdminAccount.objects.get(default=True)
+        account = AdminAccount.objects.get(default=True)
+        interface = Interface(account=account)
 
-            # Get interface and issuer address:
-            interface = Interface(account=account)
-            issuer_address = interface.get_issuer_address(issuer, asset_code)
+        issuer_details = interface.get_or_create_asset(issuer, asset_code, metadata)
 
-            # Trust and create asset if it does not yet exist.
-            if not Asset.objects.filter(code=asset_code, account_id=issuer_address).exists():
-                interface.trust_issuer(asset_code, issuer)
-                Asset.objects.create(code=asset_code, issuer=issuer, account_id=issuer_address, metadata=metadata)
-            else:
-                logger.info('Issuer already trusted: %s %s' % (issuer, asset_code))
-                issuer = Asset.objects.get(code=asset_code, account_id=issuer_address).issuer
-
-        except Exception as exc:
-            logger.exception(exc)
-            try:
-                logger.info(exc.payload)
-            except:
-                pass
-            raise APIException('Error adding asset.')
-
-        return Response({'status': 'success', 'issuer': issuer})
+        return Response({'status': 'success', 'data': issuer_details})
 
     def get(self, request, *args, **kwargs):
         raise exceptions.MethodNotAllowed('GET')

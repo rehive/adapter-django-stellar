@@ -3,6 +3,7 @@ from logging import getLogger
 
 import requests
 import toml
+from django.conf import settings
 from rest_framework.exceptions import MethodNotAllowed, ValidationError, ParseError
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,7 +15,7 @@ from .throttling import NoThrottling
 
 logger = getLogger('django')
 
-STELLAR_WALLET_DOMAIN = 'luuun.com'
+STELLAR_WALLET_DOMAIN = 'rehive.com'
 
 
 def get_federation_details(address):
