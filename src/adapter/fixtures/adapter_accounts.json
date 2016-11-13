@@ -1,0 +1,11 @@
+[
+  {
+    "model": "stellar_adapter.adminaccount",
+    "pk": 1,
+    "fields": {
+      "name": "hotwallet",
+      "account_id": "GBMWQ5WFM4LUY2MDBDNNZWWCGSGHRFAKJN6HHXJVR6YG7HBU3H3RGOD6",
+      "last_transaction": {}
+    }
+  }
+]
